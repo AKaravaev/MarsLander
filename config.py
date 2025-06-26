@@ -1,0 +1,46 @@
+class DisplayParams:
+    DISPLAY_RATE = 10
+
+
+class EnvParams:
+    GRAVITY = 3.711  # Mars gravity in m/s^2
+    SURFACE = [
+        (0, 100),
+        (1000, 500),
+        (1500, 1500),
+        (3000, 1000),
+        (4000, 150),
+        (5500, 150),
+        (6999, 800),
+    ]
+    WORLD_SIZE = (7000, 3000)
+    INITIAL_BOT_POSITION = (2500, 2699)
+    INITIAL_BOT_VELOCITY = (0, 0)
+    INITIAL_BOT_ANGLE = 0
+    INITIAL_BOT_POWER = 0
+    INITIAL_BOT_FUEL = 5501
+    MAXIMUM_LANDING_VELOCITY = (20, 40)
+    MAXIMUM_LANDING_ANGLE = 15
+    MIN_ANGLE = -90
+    MAX_ANGLE = 90
+    MIN_POWER = 0
+    MAX_POWER = 4
+    MIN_ANGLE_CHANGE = -15
+    MAX_ANGLE_CHANGE = 15
+    MIN_POWER_CHANGE = -1
+    MAX_POWER_CHANGE = 1
+
+
+class GeneticAlgorithmParams:
+    PROGRAM_LENGTH = 100
+    PROGRAM_POPULATION_SIZE = 100
+    ELITISM = 0.1
+    REPRODUCTION_SELECTION = 0.25
+    CROSSOVER_BETA = 0.25
+    MUTATION_RATE = 0.05
+    # Scores
+    LANDING_FOUND_SCORE = 100
+    LANDING_SUCCESS_SCORE = 100
+    FUEL_EFFICIENCY_SCORE = 1000
+    # Progress Parameter
+    REDUCTION = 10
