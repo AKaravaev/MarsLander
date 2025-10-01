@@ -1,8 +1,23 @@
-class DisplayParams:
-    DISPLAY_RATE = 10
+class DisplayConfig:
+    SCREEN_SIZE = (700, 300)
+    FPS = 30
+    SURFACE_COLOR = "orange"
+    BOT_COLOR = "white"
+    PATH_COLOR = "blue"
+    TRACES_COLOR = "green"
+    POWER_VECTOR_COLOR = "red"
+    POWER_VECTOR_LENGTH = 5
+    CRASH_MARKER_SIZE = 10
+    CRASH_MARKER_COLOR = "red"
+    CRASH_MARKER_WIDTH = 5
+    INFO_SPACING = 15
+    BOT_SIZE = 20
+    FONT_NAME = "arial"
+    FONT_SIZE = 16
+    FONT_COLOR = "white"
 
 
-class EnvParams:
+class EnvConfig:
     GRAVITY = 3.711  # Mars gravity in m/s^2
     SURFACE = [
         (0, 100),
@@ -14,8 +29,9 @@ class EnvParams:
         (6999, 800),
     ]
     WORLD_SIZE = (7000, 3000)
-    INITIAL_BOT_POSITION = (2500, 2699)
-    INITIAL_BOT_VELOCITY = (0, 0)
+    MAX_SURFACE_LEN = 7  # 30
+    INITIAL_BOT_POSITION = (2500.0, 2699.0)
+    INITIAL_BOT_VELOCITY = (0.0, 0.0)
     INITIAL_BOT_ANGLE = 0
     INITIAL_BOT_POWER = 0
     INITIAL_BOT_FUEL = 5501
@@ -31,16 +47,16 @@ class EnvParams:
     MAX_POWER_CHANGE = 1
 
 
-class GeneticAlgorithmParams:
+class GeneticAlgorithmConfig:
     PROGRAM_LENGTH = 100
-    PROGRAM_POPULATION_SIZE = 100
-    ELITISM = 0.1
-    REPRODUCTION_SELECTION = 0.25
+    PROGRAM_POPULATION_SIZE = 500
+    GENERATIONS_NUM = 10
+    ELITE_PROPORTION = 0.1
+    REPRODUCTION_POOL_PROPORTION = 0.25
     CROSSOVER_BETA = 0.25
     MUTATION_RATE = 0.05
-    # Scores
-    LANDING_FOUND_SCORE = 100
-    LANDING_SUCCESS_SCORE = 100
-    FUEL_EFFICIENCY_SCORE = 1000
-    # Progress Parameter
-    REDUCTION = 10
+
+
+class Rewards:
+    LANDING_FOUND = 100
+    LANDING_SUCCESS = 100
