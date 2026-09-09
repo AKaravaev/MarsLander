@@ -9,62 +9,46 @@ from config import EnvConfig as Env
 class BotStates(NamedTuple):
     position: np.ndarray
     velocity: np.ndarray
-    acceleration: np.ndarray
     fuel: np.ndarray
     angle: np.ndarray
     power: np.ndarray
 
 
+class BotState(NamedTuple):
+    position: np.ndarray
+    velocity: np.ndarray
+    fuel: int
+    angle: int
+    power: int
+
+
 class Bot:
 
     def __init__(self, position, velocity, angle, power, fuel):
-        self.position = np.array(position)
-        self.velocity = np.array(velocity)
-        self.acceleration = np.array((0, 0))
+        self.position = position
+        self.velocity = np.asarray(velocity)
         self.angle = angle
         self.power = power
         self.fuel = fuel
-        self.history = BotStates(
-            position=self.position[np.newaxis, :],
-            velocity=self.velocity[np.newaxis, :],
-            acceleration=self.acceleration[np.newaxis, :],
-            fuel=np.array(self.fuel),
-            angle=np.array(self.angle),
-            power=np.array(self.power),
-        )
+        self.history = []
+        self._add_current_state_to_history()
         self.traces = None
 
     @property
-    def x(self):
-        return self.position[0]
+    def position(self):
+        return self._position.copy()
 
-    @x.setter
-    def x(self, value):
-        self.position[0] = value
-
-    @property
-    def y(self):
-        return self.position[1]
-
-    @y.setter
-    def y(self, value):
-        self.position[1] = value
+    @position.setter
+    def position(self, value):
+        self._position: np.ndarray = np.array(value, dtype=np.float64)
 
     @property
-    def vx(self):
-        return self.velocity[0]
+    def velocity(self):
+        return self._velocity.copy()
 
-    @vx.setter
-    def vx(self, value):
-        self.velocity[0] = value
-
-    @property
-    def vy(self):
-        return self.velocity[1]
-
-    @vy.setter
-    def vy(self, value):
-        self.velocity[1] = value
+    @velocity.setter
+    def velocity(self, value):
+        self._velocity: np.ndarray = np.array(value, dtype=np.float64)
 
     @property
     def angle(self):
@@ -72,7 +56,7 @@ class Bot:
 
     @angle.setter
     def angle(self, value):
-        self._angle = max(Env.MIN_ANGLE, min(Env.MAX_ANGLE, value))
+        self._angle: int = max(-Env.MAX_ANGLE, min(Env.MAX_ANGLE, value))
 
     @property
     def power(self):
@@ -80,9 +64,27 @@ class Bot:
 
     @power.setter
     def power(self, value):
-        self._power = max(Env.MIN_POWER, min(Env.MAX_POWER, value))
+        self._power: int = max(0, min(Env.MAX_POWER, value))
+
+    @property
+    def fuel(self):
+        return self._fuel
+
+    @fuel.setter
+    def fuel(self, value):
+        self._fuel: int = max(value, 0)
 
     def _add_current_state_to_history(self):
+        self.history.append(
+            BotState(
+                position=self.position,
+                velocity=self.velocity,
+                fuel=self.fuel,
+                angle=self.angle,
+                power=self.power,
+            )
+        )
+        """
         self.history = BotStates(
             position=np.vstack((self.history.position, self.position)),
             velocity=np.vstack((self.history.velocity, self.velocity)),
@@ -91,21 +93,23 @@ class Bot:
             angle=np.vstack((self.history.angle, self.angle)),
             power=np.vstack((self.history.power, self.power)),
         )
+        """
 
     def execute(self, angle_change, power_change):
         self.angle += angle_change
         self.power += power_change
 
         # Calculating new state
-        a = np.array(
+        rad_angle = math.radians(self.angle)
+        acc = np.array(
             (
-                math.sin(math.radians(self.angle)) * self.power,
-                math.cos(math.radians(self.angle)) * self.power - Env.GRAVITY,
+                math.sin(rad_angle) * self.power,
+                math.cos(rad_angle) * self.power - Env.GRAVITY,
             )
         )
-        self.position += self.velocity + a / 2
-        self.velocity += a
-        self.fuel -= self.power
+        self._position += self._velocity + acc / 2
+        self._velocity += acc
+        self._fuel -= self.power
         self._add_current_state_to_history()
 
     def emulate(self, actions):
@@ -148,7 +152,6 @@ class Bot:
         self.traces = BotStates(
             position=pos,
             velocity=vel,
-            acceleration=acc,
             fuel=fuel,
             angle=actions[..., 0],
             power=actions[..., 1],

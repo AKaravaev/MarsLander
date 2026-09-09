@@ -1,3 +1,4 @@
+import random
 from enum import Enum
 
 import gymnasium as gym
@@ -7,7 +8,6 @@ from gymnasium import spaces
 import npgeom as geom
 from bot import Bot
 from config import EnvConfig as Conf
-from config import Rewards
 from surface import Surface
 
 
@@ -15,8 +15,9 @@ class EnvStatus(Enum):
     RUNNING = 0
     BOT_LANDED = 1
     BOT_CRASHED = 2
-    BOT_OUT_OF_BOUNDS = 3
-    BOT_OUT_OF_FUEL = 4
+    BOT_LANDING_CRASH = 3
+    BOT_OUT_OF_BOUNDS = 4
+    BOT_OUT_OF_FUEL = 5
 
 
 class MarsLanderEnv(gym.Env):
@@ -31,10 +32,10 @@ class MarsLanderEnv(gym.Env):
         self.size = np.asarray(Conf.WORLD_SIZE)
         self.action_space = spaces.MultiDiscrete(
             [
-                Conf.MAX_ANGLE_CHANGE - Conf.MIN_ANGLE_CHANGE + 1,
-                Conf.MAX_POWER_CHANGE - Conf.MIN_POWER_CHANGE + 1,
+                2 * Conf.MAX_ANGLE_CHANGE + 1,
+                2 * Conf.MAX_POWER_CHANGE + 1,
             ],
-            start=[Conf.MIN_ANGLE_CHANGE, Conf.MIN_POWER_CHANGE],
+            start=[-Conf.MAX_ANGLE_CHANGE, -Conf.MAX_POWER_CHANGE],
         )
         self.observation_space = spaces.Dict(
             {
@@ -55,7 +56,7 @@ class MarsLanderEnv(gym.Env):
                 ),
             }
         )
-        self.reset()
+        # self.reset()
 
     def _get_obs(self):
         return {
@@ -64,28 +65,26 @@ class MarsLanderEnv(gym.Env):
             "bot": {
                 "position": self.bot.position / self.size,
                 "velocity": self.bot.velocity / self.size,
-                "angle": self.bot.angle / max(abs(Conf.MAX_ANGLE), abs(Conf.MIN_ANGLE)),
-                "power": self.bot.power / max(abs(Conf.MAX_POWER), abs(Conf.MIN_POWER)),
+                "angle": self.bot.angle / Conf.MAX_ANGLE,
+                "power": self.bot.power / Conf.MAX_POWER,
             },
         }
 
     def _get_info(self):
         return
 
-    def _check_conditions(self):
-        step, segment, col_point = self.mars.detect_collisions(
-            self.bot.history.position[-2:, ...]
-        )
+    def _check_term_conditions(self):
+        pos = [i.position for i in self.bot.history[-2:]]
+        step, segment, col_point = self.mars.detect_collisions(pos)
         # If we've collided with the surface
         if step:
             if segment == self.mars._landing_index:
                 # Checking landing speed
                 if np.all(
-                    np.abs(self.bot.history.velocity[-1, ...])
-                    < np.asarray(Conf.MAXIMUM_LANDING_VELOCITY)
-                ) and (self.bot.history.angle[-1, ...] == 0):
+                    np.abs(self.bot.velocity)
+                    <= np.asarray(Conf.MAXIMUM_LANDING_VELOCITY)
+                ) and (self.bot.angle == 0):
                     self.status = EnvStatus.BOT_LANDED
-                    self.reward = Rewards.LANDING_SUCCESS
                 else:
                     self.status = EnvStatus.BOT_CRASHED
             else:
@@ -97,43 +96,55 @@ class MarsLanderEnv(gym.Env):
         elif self.bot.fuel < 0:
             self.status = EnvStatus.BOT_OUT_OF_FUEL
 
-    def generate_random_actions(self, size):
+    def generate_random_inputs(self, size):
         rng = np.random.default_rng()
         angle_change = rng.integers(
-            low=Conf.MIN_ANGLE_CHANGE,
+            low=-Conf.MAX_ANGLE_CHANGE,
             high=Conf.MAX_ANGLE_CHANGE,
             size=size,
             endpoint=True,
         )
         power_change = rng.integers(
-            low=Conf.MIN_POWER_CHANGE,
+            low=-Conf.MAX_POWER_CHANGE,
             high=Conf.MAX_POWER_CHANGE,
             size=size,
             endpoint=True,
         )
-        actions = np.stack((angle_change, power_change), axis=-1)
-        return actions
+        inputs = np.stack((angle_change, power_change), axis=-1)
+        return inputs
+
+    def load_initial_state(self, surface, bot, add_randomness=True):
+        if add_randomness and random.random() < 0.5:
+            is_flipped = True
+        else:
+            is_flipped = False
+        if is_flipped:
+            surface = np.asarray(surface)
+            surface[:, 0] = self.size[0] - surface[:, 0]
+            surface = surface[::-1]
+            bot["position"] = (self.size[0] - bot["position"][0], bot["position"][1])
+            bot["velocity"] = (-bot["velocity"][0], bot["velocity"][1])
+            bot["angle"] *= -1
+        self.mars = Surface(surface)
+        self.bot = Bot(**bot)
 
     def reset(self):
         self.iter = 0
         self.status = EnvStatus.RUNNING
         self.truncated = False
         self.reward = 0
-        self.mars = Surface(Conf.SURFACE)
-        self.bot = Bot(
-            position=Conf.INITIAL_BOT_POSITION,
-            velocity=Conf.INITIAL_BOT_VELOCITY,
-            angle=Conf.INITIAL_BOT_ANGLE,
-            power=Conf.INITIAL_BOT_POWER,
-            fuel=Conf.INITIAL_BOT_FUEL,
-        )
+        self.load_initial_state(**random.choice(Conf.TEST_CASES))
+        self.best_path_id = -1
         return self._get_obs(), self._get_info()
+
+    def set_best_path(self, id: int):
+        self.best_path_id = id
 
     def step(self, action):
         self.iter += 1
         angle_change, power_change = action
         self.bot.execute(angle_change, power_change)
-        self._check_conditions()
+        self._check_term_conditions()
         return (
             self._get_obs(),
             self.reward,
@@ -145,12 +156,32 @@ class MarsLanderEnv(gym.Env):
     def render(self):
         pass
 
-    def emulate_programs(self, programs):
-        program_length = programs.shape[1]
-        program_num = programs.shape[0]
-        actions = (self.bot.angle, self.bot.power) + np.cumsum(programs, axis=1)
-        np.clip(actions[..., 0], Conf.MIN_ANGLE, Conf.MAX_ANGLE, actions[..., 0])
-        np.clip(actions[..., 1], Conf.MIN_POWER, Conf.MAX_POWER, actions[..., 1])
+    def convert_inputs_to_actions(self, inputs):
+        actions = (self.bot.angle, self.bot.power) + np.cumsum(inputs, axis=1)
+        np.clip(actions[:, :, 0], -Conf.MAX_ANGLE, Conf.MAX_ANGLE, actions[:, :, 0])
+        np.clip(actions[:, :, 1], 0, Conf.MAX_POWER, actions[:, :, 1])
+        return actions
+
+    def convert_actions_to_inputs(self, actions):
+        return np.insert(
+            np.diff(actions, axis=1),
+            0,
+            actions[:, 0, :] - (self.bot.angle, self.bot.power),
+            axis=1,
+        )
+
+    def normalize_inputs(self, inputs):
+        actions = self.convert_inputs_to_actions(inputs)
+        return self.convert_actions_to_inputs(actions)
+
+    def emulate_inputs(self, inputs):
+        actions = self.convert_inputs_to_actions(inputs)
+        return self.emulate_actions(actions)
+
+    def emulate_actions(self, actions):
+        actions_num = actions.shape[1]
+        program_num = actions.shape[0]
+
         bot_states = self.bot.emulate(actions)
 
         # Checking termination conditions
@@ -167,64 +198,45 @@ class MarsLanderEnv(gym.Env):
         # Now finding which conditions was triggered earlier
         cond_term_step = np.stack((oob_step, oof_step, col_step), axis=1)
         # If conditions wasn't triggered, then assuming maximum possible step
-        cond_term_step[cond_term_step == 0] = program_length + 1
+        cond_term_step[cond_term_step == 0] = actions_num + 1
         term_cond = np.argmin(cond_term_step, axis=-1)
         term_step = np.min(cond_term_step, axis=-1)
 
-        # Calculating scores
+        term_status = np.repeat(EnvStatus.RUNNING.value, program_num)
+        term_status[(term_step <= actions_num) & (term_cond == 0)] = (
+            EnvStatus.BOT_OUT_OF_BOUNDS.value
+        )
+        term_status[term_cond == 1] = EnvStatus.BOT_OUT_OF_FUEL.value
 
-        # If not a collision, the score is zero
-        scores = np.zeros(program_num)
         # Determine which traces ended in collission
         is_col = term_cond == 2
+        # Update traces to terminate at a collision point
+        bot_states.position[is_col, term_step[is_col]] = col_point[is_col]
+
         # Separate collisions with landing segment from other crashes
-        is_landing = is_col & (col_segment == self.mars._landing_index)
-        is_not_landing = is_col & (~is_landing)
+        is_landing_col = is_col & (col_segment == self.mars._landing_index)
+        is_not_landing_col = is_col & (~is_landing_col)
+        term_status[is_not_landing_col] = EnvStatus.BOT_CRASHED.value
+        term_status[is_landing_col] = EnvStatus.BOT_LANDING_CRASH.value
 
-        # In case of crashes, we need to identify crash point
-        # and it's distance to the landing segment
-        col_dist = geom.point_to_segment_dist_2d(
-            col_point[is_not_landing], self.mars.landing[0], self.mars.landing[1]
-        )
-
-        # Reward for crashes is proportional to the distance
-        """
-        scores[is_crash] = (
-            1 - np.minimum(col_dist, self.size[0]) / self.size[0]
-        ) * Rewards.LANDING_FOUND
-        """
-        scores[is_not_landing] = Rewards.LANDING_FOUND * (
-            1 - np.tanh(2 * col_dist / self.size[0])
-        )
         # If landing is found, let's check the landing speed
-        landing_step = col_step[is_landing] - 1
-        landing_vel = np.abs(
-            np.take_along_axis(
-                bot_states.velocity[is_landing],
-                landing_step[:, np.newaxis, np.newaxis],
-                axis=-2,
-            ).squeeze(axis=-2)
-        )
-        landing_fuel = np.take_along_axis(
-            bot_states.fuel[is_landing], landing_step[:, np.newaxis], axis=-1
-        ).squeeze(axis=-1)
+        if np.any(is_landing_col):
+            # landing_step = col_step[is_landing_col] - 1
+            landing_vel = np.abs(
+                np.take_along_axis(
+                    bot_states.velocity[is_landing_col],
+                    col_step[is_landing_col][:, None, None],
+                    axis=1,
+                ).squeeze(axis=1)
+            )
+            max_land_vel = np.asarray(Conf.MAXIMUM_LANDING_VELOCITY)
+            is_landing_success = np.all(landing_vel <= max_land_vel, axis=-1)
 
-        max_land_vel = np.asarray(Conf.MAXIMUM_LANDING_VELOCITY)
+            term_status[np.where(is_landing_col)[0][is_landing_success]] = (
+                EnvStatus.BOT_LANDED.value
+            )
 
-        land_vel_excess = geom.distance(
-            np.maximum(landing_vel - max_land_vel, 0) / max_land_vel, (0, 0)
-        )
-
-        is_landing_success = np.all(landing_vel <= max_land_vel, axis=-1)
-
-        scores[is_landing] = np.where(
-            is_landing_success,
-            Rewards.LANDING_FOUND + Rewards.LANDING_SUCCESS + (landing_fuel / 100),
-            Rewards.LANDING_SUCCESS * (1 - np.tanh(land_vel_excess))
-            + Rewards.LANDING_FOUND,
-        )
-
-        return scores, term_step
+        return bot_states, term_status, term_step
 
 
 """

@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.typing import ArrayLike
 
-from config import GeneticAlgorithmConfig as Conf
+from config import GAConfig as Conf
 
 
 class Chromosomes:
@@ -68,10 +68,7 @@ class Chromosomes:
         ).astype(int)
 
         # Mutate genes
-        mutations = children[
-            rng.random((children_num, chromo_len)) < Conf.MUTATION_RATE
-        ]
-        mutations = self.gene_generator(mutations.shape[:-1])
+        mutations = rng.random((children_num, chromo_len)) < Conf.MUTATION_RATE
+        children[mutations] = self.gene_generator(np.count_nonzero(mutations))
 
-        programs = np.vstack((elite, children))
-        return programs
+        return np.vstack((elite, children))

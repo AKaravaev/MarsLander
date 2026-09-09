@@ -15,7 +15,8 @@ if __name__ == "__main__":
     viewer = MarsLanderViewer(env)
     obs, info = env.reset()
     viewer.draw_frame()
-    policy = Policy(env)
+    policy = Policy(env, lambda: viewer.draw_frame())
+    task = None
 
     while True:
         for event in pygame.event.get():
@@ -30,11 +31,13 @@ if __name__ == "__main__":
                     case pygame.K_r:
                         policy.reset()
                         env.reset()
+                        viewer.reset()
                         running = True
 
         if running:
             action = policy.action()
             obs, reward, terminated, trunctated, info = env.step(action)
+            # running = False
 
         viewer.draw_frame()
         if terminated or trunctated:

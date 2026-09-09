@@ -12,6 +12,9 @@ class MarsLanderViewer:
         self.screen = pygame.display.set_mode(Display.SCREEN_SIZE)
         self.font = pygame.font.SysFont(Display.FONT_NAME, Display.FONT_SIZE)
         self.env = env
+        self.reset()
+
+    def reset(self):
         self.background = None
         self.bot_sprite = None
 
@@ -67,12 +70,14 @@ class MarsLanderViewer:
             rotated_bot_sprite,
             bot_pos + bot_offset_vector,
         )
-        if len(self.env.bot.history.position) >= 2:
+        if len(self.env.bot.history) >= 2:
             pygame.draw.lines(
                 self.screen,
                 Display.PATH_COLOR,
                 closed=False,
-                points=self._convert_coords(self.env.bot.history.position).tolist(),
+                points=self._convert_coords(
+                    [i.position for i in self.env.bot.history]
+                ).tolist(),
             )
         self._draw_power(bot_pos)
         # Draw traces
@@ -85,6 +90,12 @@ class MarsLanderViewer:
                     closed=False,
                     points=trace,
                 )
+            pygame.draw.lines(
+                self.screen,
+                Display.BEST_TRACE_COLOR,
+                closed=False,
+                points=traces[self.env.best_path_id],
+            )
         if self.env.status == EnvStatus.BOT_CRASHED:
             self._draw_crash_marker(bot_pos)
 
@@ -125,17 +136,24 @@ class MarsLanderViewer:
         fuel_info = self.font.render(
             f"Fuel: {self.env.bot.fuel}", True, Display.FONT_COLOR
         )
+        pos_info = self.font.render(
+            f"Position: {self.env.bot.position}",
+            True,
+            Display.FONT_COLOR,
+        )
         vel_info = self.font.render(
-            f"Velocity: {self.env.bot.velocity}", True, Display.FONT_COLOR
+            f"Velocity: {self.env.bot.velocity}",
+            True,
+            Display.FONT_COLOR,
         )
         self.screen.blit(fuel_info, (0, 0))
         self.screen.blit(angle_info, (0, Display.INFO_SPACING))
         self.screen.blit(power_info, (0, Display.INFO_SPACING * 2))
-        self.screen.blit(vel_info, (0, Display.INFO_SPACING * 3))
+        self.screen.blit(pos_info, (0, Display.INFO_SPACING * 3))
+        self.screen.blit(vel_info, (0, Display.INFO_SPACING * 4))
 
     def draw_frame(self):
         self.draw_background()
         self.draw_bot()
         self.show_info()
-        pygame.display.flip()
         pygame.display.flip()

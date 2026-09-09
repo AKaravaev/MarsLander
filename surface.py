@@ -50,7 +50,7 @@ class Surface:
         self._landing_index = i
         self._landing = np.array(landing)
 
-        # Normalize the surface to contain exactoy Env.MAX_SURFACE_LEN points
+        # Normalize the surface to contain exactly Env.MAX_SURFACE_LEN points
         while value.shape[0] < Env.MAX_SURFACE_LEN:
             # Find index of the longest segment
             i = np.argmax(geom.distance(value[:-1], value[1:]))
